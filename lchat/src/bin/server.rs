@@ -42,7 +42,7 @@ fn handle_client(
     {
         let mut guard = stream.lock().unwrap();
         if guard
-            .write_all(b"Please enter your nickname:\n")
+            .write_all(b"Please enter your nickname: ")
             .and_then(|_| guard.flush())
             .is_err()
         {

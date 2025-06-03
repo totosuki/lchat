@@ -1,20 +1,32 @@
-use std::fmt::write;
-use std::io::{self, BufRead, BufReader, Write, Result};
+use std::io::{self, BufRead, BufReader, Read, Result, Write};
 use std::net::TcpStream;
 use std::thread;
 
 fn main() -> Result<()> {
     // ----- initialization -----
     let stream = TcpStream::connect("127.0.0.1:8080")?;
-    let read_stream = stream.try_clone()?; // 受信用
+    let mut read_stream = stream.try_clone()?; // 受信用
     let mut write_stream = stream;         // 送信用
 
     // ----- サーバーからプロンプトを１行受信 -----
-    let mut reader_prompt = BufReader::new(read_stream);
-    let mut prompt = String::new();
-    reader_prompt.read_line(&mut prompt)?;
-    print!("{prompt}");
-    io::stdout().flush()?;
+    let mut prompt= Vec::<u8>::new();
+    let mut byte = [0u8; 1];
+    loop {
+        if read_stream.read(&mut byte)? == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "server closed before sending prompt",
+            ));
+        }
+        prompt.push(byte[0]);
+
+        // 末尾が “: ”（0x3A 0x20）になったら終了
+        if prompt.ends_with(b": ") {
+            break;
+        }
+    }
+    print!("{}", String::from_utf8_lossy(&prompt));
+    io::stdout().flush()?; 
 
     // ----- ニックネーム入力 -----
     let mut nickname = String::new();
