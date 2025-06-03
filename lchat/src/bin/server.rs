@@ -18,7 +18,7 @@ fn main() -> Result<()> {
         println!("{} : connected", peer);
 
         // 共有リストに登録
-        let client_stream =  Arc::new(Mutex::new(stream));
+        let client_stream: Arc<Mutex<TcpStream>> =  Arc::new(Mutex::new(stream));
         clients.lock().unwrap().push(client_stream.clone());
 
         // 各クライアントを処理するスレッドを作成
