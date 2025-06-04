@@ -17,7 +17,7 @@ use crossterm::{
 
 fn main() -> Result<()> {
     // ----- initialization -----
-    let tcp = TcpStream::connect("127.0.0.1:8080")?;
+    let tcp = TcpStream::connect("10.192.134.234:8080")?;
     let mut writer = tcp.try_clone()?; // 送信用
     let mut reader = tcp;              // 受信用
 
