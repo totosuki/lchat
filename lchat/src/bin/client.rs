@@ -52,6 +52,7 @@ fn main() -> Result<()> {
     let (mut cols, mut rows) = terminal::size()?; // 初期サイズ
     let mut chat_lines: Vec<String> = Vec::new();           // 画面表示用バッファ
     let mut input = String::new();                  // ユーザー入力
+    let mut cursor = 0usize;                         // 入力カーソル位置
 
     loop {
         // ----- 非ブロッキングで受信メッセージ取得 -----
@@ -63,19 +64,34 @@ fn main() -> Result<()> {
             }
         }
 
-        // ----- 非ブロッキングでキー入力処理 -----
+        // ----- キー入力処理 -----
         if event::poll(Duration::from_millis(10))? {
             match event::read()? {
                 Event::Key(KeyEvent { code, modifiers, .. }) => match (code, modifiers) {
+                    // 終了系
                     (KeyCode::Char('c'), KeyModifiers::CONTROL) |
-                    (KeyCode::Esc,   _) => break,   // 終了
+                    (KeyCode::Esc, _) => break,
 
-                    (KeyCode::Backspace, _) => { input.pop(); },
-                    (KeyCode::Enter,     _) => {
+                    // 移動系
+                    (KeyCode::Left, _) => { if cursor > 0 { cursor -= 1; } },
+                    (KeyCode::Right, _) => { if cursor < input.len() { cursor += 1; } },
+
+                    // 編集系
+                    (KeyCode::Backspace, _) => { 
+                        if cursor > 0 {
+                            cursor -= 1;
+                            input.remove(cursor);
+                        }
+                    },
+                    (KeyCode::Char(c), _) => {
+                        input.insert(cursor, c);
+                        cursor += 1;
+                    },
+                    (KeyCode::Enter, _) => {
                         writer.write_all(format!("{}\n", input).as_bytes())?;
                         input.clear();
+                        cursor = 0;
                     }
-                    (KeyCode::Char(c),   _) => input.push(c),
                     _ => {}
                 },
                 Event::Resize(c, r) => { cols = c; rows = r; },
@@ -86,7 +102,7 @@ fn main() -> Result<()> {
         // ----- 画面全体を再描画 -----
         stdout.queue(Clear(ClearType::All))?;
 
-        // チャット表示（下から上へ）
+        // ----- チャット表示 -----
         let chat_height = rows.saturating_sub(1);
         for (i, line) in chat_lines.iter().rev().enumerate() {
             if i as u16 >= chat_height { break; }
@@ -95,9 +111,14 @@ fn main() -> Result<()> {
                   .queue(Print(line.trim_end()))?;
         }
 
-        // 入力行
+        // ----- 入力行描画 -----
+        let prompt = "> ";
         stdout.queue(MoveTo(0, rows - 1))?
-              .queue(Print(format!("> {}", input)))?;
+              .queue(Print(format!("{prompt}{input}")))?;
+        
+        // ----- カーソル位置調整 -----
+        let cursor_x = prompt.len() as u16 + cursor as u16;
+        stdout.queue(MoveTo(cursor_x, rows - 1))?;
 
         stdout.flush()?;
     }
