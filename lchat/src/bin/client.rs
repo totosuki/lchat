@@ -4,6 +4,7 @@ use std::{
     sync::mpsc,
     thread,
     time::Duration,
+    env,
 };
 
 use crossterm::{
@@ -16,8 +17,20 @@ use crossterm::{
 };
 
 fn main() -> Result<()> {
-    // ----- initialization -----
-    let tcp = TcpStream::connect("10.192.134.234:8080")?;
+    // ----- コマンドライン引数から取得 -----
+    let mut args = env::args().skip(1);
+    let addr_str = args.next().unwrap_or_else(|| {
+        eprintln!("Usage: client <IP>[:PORT]");
+        std::process::exit(1);
+    });
+    let addr = if addr_str.contains(':') {
+        addr_str
+    } else {
+        format!("{addr_str}:8080")
+    };
+
+    // ----- TCP接続 -----
+    let tcp = TcpStream::connect(&addr)?;
     let mut writer = tcp.try_clone()?; // 送信用
     let mut reader = tcp;              // 受信用
 
