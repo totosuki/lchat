@@ -90,6 +90,9 @@ fn main() -> Result<()> {
                     (KeyCode::Right, _) => { if cursor < input.len() { cursor += 1; } },
 
                     // 編集系
+                    (KeyCode::Char('l'), KeyModifiers::CONTROL) => {
+                        chat_lines = Vec::new();
+                    },
                     (KeyCode::Backspace, _) => { 
                         if cursor > 0 {
                             cursor -= 1;

@@ -13,8 +13,8 @@ type SharedClients = Arc<Mutex<Vec<Client>>>;
 
 
 fn main() -> Result<()> {
-    let listener = TcpListener::bind("0.0.0.0:8080")?;
-    println!("Chat server running on 0.0.0.0:8080");
+    let listener = TcpListener::bind("0.0.0.0:8099")?;
+    println!("Chat server running on 0.0.0.0:8099");
 
     let clients: SharedClients = Arc::new(Mutex::new(Vec::new()));
 
