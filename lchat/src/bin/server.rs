@@ -1,7 +1,10 @@
-use std::io::{BufRead, BufReader, Write, Result};
-use std::net::{TcpListener, TcpStream, SocketAddr};
-use std::sync::{Arc, Mutex};
-use std::thread;
+use std::{
+    io::{BufRead, BufReader, Write, Result},
+    net::{TcpListener, TcpStream, SocketAddr},
+    sync::{Arc, Mutex},
+    thread,
+    env
+};
 
 /// クライアントごとの保持情報
 struct Client {
@@ -13,8 +16,17 @@ type SharedClients = Arc<Mutex<Vec<Client>>>;
 
 
 fn main() -> Result<()> {
-    let listener = TcpListener::bind("0.0.0.0:8099")?;
-    println!("Chat server running on 0.0.0.0:8099");
+    // コマンドライン引数
+    let args: Vec<String> = env::args().collect();
+    let port = if args.len() >= 2 {
+        &args[1]
+    } else {
+        "8080"
+    };
+
+    // Bind
+    let listener = TcpListener::bind(format!("0.0.0.0:{port}"))?;
+    println!("Chat server running on 0.0.0.0:{port}");
 
     let clients: SharedClients = Arc::new(Mutex::new(Vec::new()));
 
@@ -24,7 +36,7 @@ fn main() -> Result<()> {
         let peer = stream.peer_addr()?;
         println!("{peer} : connected");
 
-        let client_stream = Arc::new(Mutex::new(stream));
+        let client_stream  = Arc::new(Mutex::new(stream));
         let clients_clone = Arc::clone(&clients);
         thread::spawn(move || handle_client(client_stream, clients_clone, peer));
     }
