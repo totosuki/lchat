@@ -1,5 +1,9 @@
 use std::{
-    env, io::{self, BufRead, BufReader, Read, Result, StdinLock, Write}, net::TcpStream, sync::mpsc, thread, time::Duration
+    env,
+    io::{self, BufRead, BufReader, Read, Result, Write},
+    net::TcpStream,
+    sync::mpsc,
+    thread,time::Duration
 };
 
 use crossterm::{
@@ -11,8 +15,7 @@ use crossterm::{
     QueueableCommand,
 };
 
-fn main() -> Result<()> {
-    // ----- コマンドライン引数から取得 -----
+fn get_arguments() -> String {
     let args: Vec<String> = env::args().collect();
     let iport = if args.len() >= 2 {
         match args[1].find(":") {
@@ -24,21 +27,10 @@ fn main() -> Result<()> {
     };
     let ip = iport.split(":").next().unwrap();
     let port = iport.split(":").skip(1).next().unwrap();
-    println!("Connect server : {}:{}", ip, port);
+    format!("{}:{}", ip, port)
+}
 
-    // ----- TCP接続 -----
-    let tcp = TcpStream::connect(format!("{}:{}", ip, port))?;
-    let mut writer = tcp.try_clone()?; // 送信用
-    let mut reader = tcp;              // 受信用
-
-    // ----- 端末をrawにする -----
-    let mut stdout = io::stdout();
-    terminal::enable_raw_mode()?;
-    stdout.execute(EnterAlternateScreen)?;
-    stdout.execute(Clear(ClearType::All))?;
-
-    // ----- 受信用 -----
-    let (tx, rx) = mpsc::channel::<String>();
+fn recv_thread(mut reader: TcpStream, tx: mpsc::Sender<String>) {
     thread::spawn(move || {
         let mut prompt = Vec::new();
         let mut byte   = [0u8; 1];
@@ -57,6 +49,26 @@ fn main() -> Result<()> {
             tx.send(line.clone()).ok();
         }
     });
+}
+
+fn main() -> Result<()> {
+    // ----- コマンドライン引数から取得 -----
+    let addr = get_arguments();
+
+    // ----- TCP接続 -----
+    let tcp = TcpStream::connect(addr)?;
+    let mut writer = tcp.try_clone()?; // 送信用
+    let mut reader = tcp;              // 受信用
+
+    // ----- 端末をrawにする -----
+    let mut stdout = io::stdout();
+    terminal::enable_raw_mode()?;
+    stdout.execute(EnterAlternateScreen)?;
+    stdout.execute(Clear(ClearType::All))?;
+
+    // ----- 受信用 -----
+    let (tx, rx) = mpsc::channel::<String>();
+    recv_thread(reader, tx);
 
     // ----- UI メインループ -----
     let (mut cols, mut rows) = terminal::size()?; // 初期サイズ
