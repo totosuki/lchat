@@ -1,10 +1,5 @@
 use std::{
-    io::{self, BufRead, BufReader, Read, Result, Write},
-    net::TcpStream,
-    sync::mpsc,
-    thread,
-    time::Duration,
-    env,
+    env, io::{self, BufRead, BufReader, Read, Result, StdinLock, Write}, net::TcpStream, sync::mpsc, thread, time::Duration
 };
 
 use crossterm::{
@@ -18,19 +13,21 @@ use crossterm::{
 
 fn main() -> Result<()> {
     // ----- コマンドライン引数から取得 -----
-    let mut args = env::args().skip(1);
-    let addr_str = args.next().unwrap_or_else(|| {
-        eprintln!("Usage: client <IP>[:PORT]");
-        std::process::exit(1);
-    });
-    let addr = if addr_str.contains(':') {
-        addr_str
+    let args: Vec<String> = env::args().collect();
+    let iport = if args.len() >= 2 {
+        match args[1].find(":") {
+            Some(index) => args[1].clone(),
+            None => format!("{}:8080", &args[1]),
+        }
     } else {
-        format!("{addr_str}:8080")
+        "localhost:8080".to_string()
     };
+    let ip = iport.split(":").next().unwrap();
+    let port = iport.split(":").skip(1).next().unwrap();
+    println!("Connect server : {}:{}", ip, port);
 
     // ----- TCP接続 -----
-    let tcp = TcpStream::connect(&addr)?;
+    let tcp = TcpStream::connect(format!("{}:{}", ip, port))?;
     let mut writer = tcp.try_clone()?; // 送信用
     let mut reader = tcp;              // 受信用
 
