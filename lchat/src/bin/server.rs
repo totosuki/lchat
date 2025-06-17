@@ -1,5 +1,5 @@
 use std::{
-    io::{BufRead, BufReader, Write, Result},
+    io::{BufRead, BufReader, Write, Result, ErrorKind, Error},
     net::{TcpListener, TcpStream, SocketAddr},
     sync::{Arc, Mutex},
     thread,
@@ -51,50 +51,25 @@ fn handle_client(
     peer: SocketAddr,
 ) {
     // ----- ニックネーム要求 -----
-    {
-        let mut guard = stream.lock().unwrap();
-        if guard
-            .write_all(b"Please enter your nickname: ")
-            .and_then(|_| guard.flush())
-            .is_err()
-        {
-            eprintln!("{peer} : failed to send prompt");
-            return;
-        }
-    }
+    match request_nickname(&stream, peer) {
+        Ok(_) => (),
+        Err(e) => eprintln!("{peer} : failed to request nickname: {e}"),
+    };
 
     // ----- 受信一行目をニックネームにする -----
-    let nickname = {
-        let guard = stream.lock().unwrap();
-        let mut reader = BufReader::new(
-            guard
-                .try_clone()
-                .expect("failed to clone stream for nickname read"),
-        );
-        let mut buf = String::new();
-        match reader.read_line(&mut buf) {
-            Ok(0) | Err(_) => {
-                eprintln!("{peer} : disconnected before sending nickname");
-                return;
-            }
-            Ok(_) => buf.trim().to_string(),
+    let nickname = match get_nickname(&stream) {
+        Ok(text) => text,
+        Err(e) => {
+            eprintln!("{} : failed to request nickname: {}", peer, e);
+            return;
         }
     };
-    if nickname.is_empty() {
-        eprintln!("{peer} : empty nickname – closing");
-        return;
-    }
 
     // ---- 共有クライアントリストへ登録 ----
-    {
-        clients
-            .lock()
-            .unwrap()
-            .push(Client {
-                stream: Arc::clone(&stream),
-                name: nickname.clone(),
-            });
-    }
+    clients.lock().unwrap().push(Client {
+        stream: Arc::clone(&stream),
+        name: nickname.clone(),
+    });
 
     // ----- 入室通知 -----
     broadcast(&clients, &format!("*** {nickname} joined ***\n"));
@@ -117,12 +92,10 @@ fn handle_client(
     }
 
     // ----- 退出処理 -----
-    {
-        clients
-            .lock()
-            .unwrap()
-            .retain(|c| !Arc::ptr_eq(&c.stream, &stream));
-    }
+    clients
+        .lock()
+        .unwrap()
+        .retain(|c| !Arc::ptr_eq(&c.stream, &stream));
     broadcast(&clients, &format!("*** {nickname} left ***\n"));
     println!("{peer} ({nickname}) disconnected");
 }
@@ -134,5 +107,30 @@ fn broadcast(clients: &SharedClients, message: &str) {
         if let Ok(mut s) = client.stream.lock() {
             let _ = s.write_all(message.as_bytes());
         }
+    }
+}
+
+fn request_nickname(stream: &Arc<Mutex<TcpStream>>, peer: SocketAddr) -> Result<()> {
+    let mut guard = stream.lock().unwrap();
+    guard.write_all(b"Please enter your nickname: ")?;
+    guard.flush()?;
+    Ok(())
+}
+
+fn get_nickname(stream: &Arc<Mutex<TcpStream>>) -> Result<String> {
+    let guard = stream.lock().unwrap();
+    let mut reader = BufReader::new(
+        guard
+            .try_clone()
+            .expect("failed to clone stream for nickname read"),
+    );
+    let mut buf = String::new();
+    reader.read_line(&mut buf)?;
+    let nickname = buf.trim().to_string();
+    // 改行のみか検知
+    if nickname.is_empty() {
+        Err(Error::new(ErrorKind::InvalidInput, "nickname is empty"))
+    } else {
+        Ok(nickname)
     }
 }
