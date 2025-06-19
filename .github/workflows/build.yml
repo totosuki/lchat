@@ -19,14 +19,17 @@ jobs:
             target: aarch64-apple-darwin
             binary_name: lchat-client
             server_name: lchat-server
+            archive_name: lchat-mac-aarch64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             binary_name: lchat-client
             server_name: lchat-server
+            archive_name: lchat-linux-x86_64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             binary_name: lchat-client.exe
             server_name: lchat-server.exe
+            archive_name: lchat-windows-x86_64
 
     steps:
     - uses: actions/checkout@v4
@@ -88,7 +91,7 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: lchat-${{ matrix.target }}
+        name: ${{ matrix.archive_name }}
         path: output/
 
   release:

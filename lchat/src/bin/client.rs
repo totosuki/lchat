@@ -8,7 +8,7 @@ use std::{
 
 use crossterm::{
     cursor::{MoveTo},
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     style::Print,
     terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
@@ -89,35 +89,41 @@ fn main() -> Result<()> {
         // ----- キー入力処理 -----
         if event::poll(Duration::from_millis(10))? {
             match event::read()? {
-                Event::Key(KeyEvent { code, modifiers, .. }) => match (code, modifiers) {
-                    // 終了系
-                    (KeyCode::Char('c'), KeyModifiers::CONTROL) |
-                    (KeyCode::Esc, _) => break,
-
-                    // 移動系
-                    (KeyCode::Left, _) => { if cursor > 0 { cursor -= 1; } },
-                    (KeyCode::Right, _) => { if cursor < input.len() { cursor += 1; } },
-
-                    // 編集系
-                    (KeyCode::Char('l'), KeyModifiers::CONTROL) => {
-                        chat_lines = Vec::new();
-                    },
-                    (KeyCode::Backspace, _) => { 
-                        if cursor > 0 {
-                            cursor -= 1;
-                            input.remove(cursor);
-                        }
-                    },
-                    (KeyCode::Char(c), _) => {
-                        input.insert(cursor, c);
-                        cursor += 1;
-                    },
-                    (KeyCode::Enter, _) => {
-                        writer.write_all(format!("{}\n", input).as_bytes())?;
-                        input.clear();
-                        cursor = 0;
+                Event::Key(KeyEvent { code, modifiers, kind, .. }) => {
+                    // Windows で二重入力を防ぐため、KeyPressのみ処理
+                    if kind != KeyEventKind::Press {
+                        continue;
                     }
-                    _ => {}
+                    match (code, modifiers) {
+                        // 終了系
+                        (KeyCode::Char('c'), KeyModifiers::CONTROL) |
+                        (KeyCode::Esc, _) => break,
+
+                        // 移動系
+                        (KeyCode::Left, _) => { if cursor > 0 { cursor -= 1; } },
+                        (KeyCode::Right, _) => { if cursor < input.len() { cursor += 1; } },
+
+                        // 編集系
+                        (KeyCode::Char('l'), KeyModifiers::CONTROL) => {
+                            chat_lines = Vec::new();
+                        },
+                        (KeyCode::Backspace, _) => { 
+                            if cursor > 0 {
+                                cursor -= 1;
+                                input.remove(cursor);
+                            }
+                        },
+                        (KeyCode::Char(c), _) => {
+                            input.insert(cursor, c);
+                            cursor += 1;
+                        },
+                        (KeyCode::Enter, _) => {
+                            writer.write_all(format!("{}\n", input).as_bytes())?;
+                            input.clear();
+                            cursor = 0;
+                        }
+                        _ => {}
+                    }
                 },
                 Event::Resize(c, r) => { cols = c; rows = r; },
                 _ => {}
