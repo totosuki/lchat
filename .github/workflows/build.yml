@@ -16,10 +16,6 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            target: x86_64-apple-darwin
-            binary_name: lchat-client
-            server_name: lchat-server
-          - os: macos-latest
             target: aarch64-apple-darwin
             binary_name: lchat-client
             server_name: lchat-server
