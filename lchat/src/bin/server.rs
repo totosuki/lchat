@@ -6,6 +6,8 @@ use std::{
     env
 };
 
+use lchat::{Packet, PacketType};
+
 /// クライアントごとの保持情報
 struct Client {
     stream: Arc<Mutex<TcpStream>>,
@@ -72,7 +74,8 @@ fn handle_client(
     });
 
     // ----- 入室通知 -----
-    broadcast(&clients, &format!("*** {nickname} joined ***\n"));
+    let join_packet = Packet::join(nickname.clone());
+    broadcast(&clients, &join_packet);
 
     // ----- メッセージ転送 -----
     let reader = {
@@ -88,7 +91,14 @@ fn handle_client(
             Ok(l) => l,
             Err(_) => break,
         };
-        broadcast(&clients, &format!("{nickname} : {msg}\n"));
+
+        let trimmed = msg.trim();
+        if let Ok(packet) = Packet::from_json(trimmed) {
+            if packet.packet_type == PacketType::Message {
+                let message_packet = Packet::message(packet.content, nickname.clone());
+                broadcast(&clients, &message_packet);
+            }
+        }
     }
 
     // ----- 退出処理 -----
@@ -96,24 +106,33 @@ fn handle_client(
         .lock()
         .unwrap()
         .retain(|c| !Arc::ptr_eq(&c.stream, &stream));
-    broadcast(&clients, &format!("*** {nickname} left ***\n"));
+    let leave_packet = Packet::leave(nickname.clone());
+    broadcast(&clients, &leave_packet);
     println!("{peer} ({nickname}) disconnected");
 }
 
 
-fn broadcast(clients: &SharedClients, message: &str) {
+fn broadcast(clients: &SharedClients, packet: &Packet) {
+    packet.log(); // ログ出力
+
     let list = clients.lock().unwrap();
-    for client in list.iter() {
-        if let Ok(mut s) = client.stream.lock() {
-            let _ = s.write_all(message.as_bytes());
+    if let Ok(json) = packet.to_json() {
+        let message = format!("{}", json);
+        for client in list.iter() {
+            if let Ok(mut s) = client.stream.lock() {
+                let _ = s.write_all(message.as_bytes());
+            }
         }
     }
 }
 
 fn request_nickname(stream: &Arc<Mutex<TcpStream>>, peer: SocketAddr) -> Result<()> {
+    let packet = Packet::nickname_request();
     let mut guard = stream.lock().unwrap();
-    guard.write_all(b"Please enter your nickname: ")?;
-    guard.flush()?;
+    if let Ok(json) = packet.to_json() {
+        guard.write_all(format!("{}", json).as_bytes())?;
+        guard.flush()?;
+    }
     Ok(())
 }
 
@@ -126,11 +145,18 @@ fn get_nickname(stream: &Arc<Mutex<TcpStream>>) -> Result<String> {
     );
     let mut buf = String::new();
     reader.read_line(&mut buf)?;
-    let nickname = buf.trim().to_string();
-    // 改行のみか検知
-    if nickname.is_empty() {
-        Err(Error::new(ErrorKind::InvalidInput, "nickname is empty"))
+    
+    let trimmed = buf.trim();
+    let packet = Packet::from_json(trimmed)
+        .map_err(|_| Error::new(ErrorKind::InvalidInput, "invalid JSON packet"))?;
+    
+    if packet.packet_type == PacketType::NicknameResponse {
+        if packet.content.is_empty() {
+            Err(Error::new(ErrorKind::InvalidInput, "nickname is empty"))
+        } else {
+            Ok(packet.content)
+        }
     } else {
-        Ok(nickname)
+        Err(Error::new(ErrorKind::InvalidInput, "invalid packet type for nickname"))
     }
 }
