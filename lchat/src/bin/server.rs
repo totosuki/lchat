@@ -117,7 +117,7 @@ fn broadcast(clients: &SharedClients, packet: &Packet) {
 
     let list = clients.lock().unwrap();
     if let Ok(json) = packet.to_json() {
-        let message = format!("{}", json);
+        let message = format!("{}\n", json);
         for client in list.iter() {
             if let Ok(mut s) = client.stream.lock() {
                 let _ = s.write_all(message.as_bytes());
@@ -130,7 +130,7 @@ fn request_nickname(stream: &Arc<Mutex<TcpStream>>, peer: SocketAddr) -> Result<
     let packet = Packet::nickname_request();
     let mut guard = stream.lock().unwrap();
     if let Ok(json) = packet.to_json() {
-        guard.write_all(format!("{}", json).as_bytes())?;
+        guard.write_all(format!("{}\n", json).as_bytes())?;
         guard.flush()?;
     }
     Ok(())

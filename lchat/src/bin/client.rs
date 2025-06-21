@@ -1,11 +1,13 @@
 use std::{
     env,
-    io::{self, BufRead, BufReader, Read, Result, Write},
+    io::{self, BufRead, BufReader, Result, Write},
     net::TcpStream,
     sync::mpsc,
-    thread,time::Duration
+    thread,
+    time::Duration
 };
 
+use lchat::{Packet, PacketType};
 use crossterm::{
     cursor::{MoveTo},
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
@@ -30,23 +32,42 @@ fn get_arguments() -> String {
     format!("{}:{}", ip, port)
 }
 
-fn recv_thread(mut reader: TcpStream, tx: mpsc::Sender<String>) {
+fn recv_thread(reader: TcpStream, tx: mpsc::Sender<String>) {
     thread::spawn(move || {
-        let mut prompt = Vec::new();
-        let mut byte   = [0u8; 1];
-        loop {
-            if reader.read_exact(&mut byte).is_err() { return; }
-            prompt.push(byte[0]);
-            if prompt.ends_with(b": ") { break; }
-        }
-        tx.send(String::from_utf8_lossy(&prompt).into()).ok();
-
         let mut buf_reader = BufReader::new(reader);
         let mut line = String::new();
         loop {
             line.clear();
             if buf_reader.read_line(&mut line).unwrap_or(0) == 0 { break; }
-            tx.send(line.clone()).ok();
+            
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            if let Ok(packet) = Packet::from_json(trimmed) {
+                match packet.packet_type {
+                    PacketType::NicknameRequest => {
+                        tx.send(packet.content).ok();
+                    },
+                    PacketType::NicknameResponse => {
+                        // ニックネーム応答は通常表示しない
+                    },
+                    PacketType::Message => {
+                        if let Some(nickname) = packet.nickname {
+                            tx.send(format!("{} : {}", nickname, packet.content)).ok();
+                        }
+                    },
+                    PacketType::Join | PacketType::Leave => {
+                        tx.send(packet.content).ok();
+                    },
+                    PacketType::Error => {
+                        tx.send(format!("Error: {}", packet.content)).ok();
+                    },
+                }
+            } else {
+                eprintln!("Failed to parse JSON: {:?}", trimmed); // デバッグ用
+            }
         }
     });
 }
@@ -75,10 +96,15 @@ fn main() -> Result<()> {
     let mut chat_lines: Vec<String> = Vec::new();           // 画面表示用バッファ
     let mut input = String::new();                  // ユーザー入力
     let mut cursor = 0usize;                         // 入力カーソル位置
+    let mut is_nickname_mode = true;                 // ニックネーム入力モード
 
     loop {
         // ----- 非ブロッキングで受信メッセージ取得 -----
         for msg in rx.try_iter() {
+            // ニックネーム要求を検出
+            if msg.contains("Please enter your nickname") {
+                is_nickname_mode = true;
+            }
             chat_lines.push(msg);
             let limit = rows.saturating_sub(1) as usize; // 最下行は入力用
             if chat_lines.len() > limit {
@@ -118,7 +144,20 @@ fn main() -> Result<()> {
                             cursor += 1;
                         },
                         (KeyCode::Enter, _) => {
-                            writer.write_all(format!("{}\n", input).as_bytes())?;
+                            if is_nickname_mode {
+                                // ニックネーム送信
+                                let packet = Packet::nickname_response(input.clone());
+                                if let Ok(json) = packet.to_json() {
+                                    writer.write_all(format!("{}\n", json).as_bytes())?;
+                                }
+                                is_nickname_mode = false;
+                            } else {
+                                // メッセージ送信
+                                let packet = Packet::new(PacketType::Message, input.clone(), None);
+                                if let Ok(json) = packet.to_json() {
+                                    writer.write_all(format!("{}\n", json).as_bytes())?;
+                                }
+                            }
                             input.clear();
                             cursor = 0;
                         }
