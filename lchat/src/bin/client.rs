@@ -61,6 +61,9 @@ fn recv_thread(reader: TcpStream, tx: mpsc::Sender<String>) {
                     PacketType::Join | PacketType::Leave => {
                         tx.send(packet.content).ok();
                     },
+                    PacketType::InfoRequest => {
+                        eprintln!("This is the packet type sent by the client.")
+                    }
                     PacketType::Error => {
                         tx.send(format!("Error: {}", packet.content)).ok();
                     },
@@ -96,15 +99,11 @@ fn main() -> Result<()> {
     let mut chat_lines: Vec<String> = Vec::new();           // 画面表示用バッファ
     let mut input = String::new();                  // ユーザー入力
     let mut cursor = 0usize;                         // 入力カーソル位置
-    let mut is_nickname_mode = true;                 // ニックネーム入力モード
+    let mut nickname: Option<String> = None;                // ニックネーム
 
     loop {
         // ----- 非ブロッキングで受信メッセージ取得 -----
         for msg in rx.try_iter() {
-            // ニックネーム要求を検出
-            if msg.contains("Please enter your nickname") {
-                is_nickname_mode = true;
-            }
             chat_lines.push(msg);
             let limit = rows.saturating_sub(1) as usize; // 最下行は入力用
             if chat_lines.len() > limit {
@@ -144,23 +143,29 @@ fn main() -> Result<()> {
                             cursor += 1;
                         },
                         (KeyCode::Enter, _) => {
-                            if is_nickname_mode {
+                            if nickname == None {
                                 // ニックネーム送信
+                                nickname = Some(input.clone());
                                 let packet = Packet::nickname_response(input.clone());
                                 if let Ok(json) = packet.to_json() {
                                     writer.write_all(format!("{}\n", json).as_bytes())?;
                                 }
-                                is_nickname_mode = false;
                             } else {
                                 // メッセージ送信
-                                let packet = Packet::new(PacketType::Message, input.clone(), None);
+                                let packet = Packet::message(input.clone(), nickname.clone().unwrap());
                                 if let Ok(json) = packet.to_json() {
                                     writer.write_all(format!("{}\n", json).as_bytes())?;
                                 }
                             }
                             input.clear();
                             cursor = 0;
-                        }
+                        },
+                        (KeyCode::Tab, _) => {
+                            let packet = Packet::info_request(format!("connection"));
+                            if let Ok(json) = packet.to_json() {
+                                writer.write_all(format!("{}\n", json).as_bytes())?;
+                            }
+                        },
                         _ => {}
                     }
                 },

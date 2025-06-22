@@ -92,11 +92,17 @@ fn handle_client(
             Err(_) => break,
         };
 
+        println!("{}", msg);
+
         let trimmed = msg.trim();
         if let Ok(packet) = Packet::from_json(trimmed) {
-            if packet.packet_type == PacketType::Message {
-                let message_packet = Packet::message(packet.content, nickname.clone());
-                broadcast(&clients, &message_packet);
+            packet.log();
+            match packet.packet_type {
+                PacketType::Message  => {
+                    let message_packet = Packet::message(packet.content, nickname.clone());
+                    broadcast(&clients, &message_packet);
+                },
+                _ => {},
             }
         }
     }

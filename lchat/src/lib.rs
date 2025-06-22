@@ -7,6 +7,7 @@ pub enum PacketType {
     Message,
     Join,
     Leave,
+    InfoRequest,
     Error,
 }
 
@@ -46,6 +47,10 @@ impl Packet {
         Self::new(PacketType::Leave, format!("*** {} left ***", nickname), Some(nickname))
     }
 
+    pub fn info_request(info: String) -> Self {
+        Self::new(PacketType::InfoRequest, format!("{}", info), None)
+    } 
+
     pub fn error(content: String) -> Self {
         Self::new(PacketType::Error, content, None)
     }
@@ -65,6 +70,7 @@ impl Packet {
             PacketType::Message => println!("[Message] {} : {}", self.nickname.as_deref().unwrap_or("Unknown"), self.content),
             PacketType::Join => println!("[Join] {}", self.content),
             PacketType::Leave => println!("[Leave] {}", self.content),
+            PacketType::InfoRequest => println!("[InfoRequest] {}", self.content),
             PacketType::Error => eprintln!("[Error] {}", self.content),
         }
     }
