@@ -63,7 +63,10 @@ fn recv_thread(reader: TcpStream, tx: mpsc::Sender<String>) {
                     },
                     PacketType::InfoRequest => {
                         eprintln!("This is the packet type sent by the client.")
-                    }
+                    },
+                    PacketType::Connection => {
+                        tx.send(format!("Connected clients: {}", packet.content)).ok();
+                    },
                     PacketType::Error => {
                         tx.send(format!("Error: {}", packet.content)).ok();
                     },

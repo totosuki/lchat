@@ -51,7 +51,7 @@ fn handle_client(
     stream: Arc<Mutex<TcpStream>>,
     clients: SharedClients,
     peer: SocketAddr,
-) {
+) -> Result<()> {
     // ----- ニックネーム要求 -----
     match request_nickname(&stream, peer) {
         Ok(_) => (),
@@ -59,13 +59,7 @@ fn handle_client(
     };
 
     // ----- 受信一行目をニックネームにする -----
-    let nickname = match get_nickname(&stream) {
-        Ok(text) => text,
-        Err(e) => {
-            eprintln!("{} : failed to request nickname: {}", peer, e);
-            return;
-        }
-    };
+    let nickname = get_nickname(&stream)?;
 
     // ---- 共有クライアントリストへ登録 ----
     clients.lock().unwrap().push(Client {
@@ -87,12 +81,7 @@ fn handle_client(
         )
     };
     for line in reader.lines() {
-        let msg = match line {
-            Ok(l) => l,
-            Err(_) => break,
-        };
-
-        println!("{}", msg);
+        let msg = line?;
 
         let trimmed = msg.trim();
         if let Ok(packet) = Packet::from_json(trimmed) {
@@ -100,7 +89,16 @@ fn handle_client(
             match packet.packet_type {
                 PacketType::Message  => {
                     let message_packet = Packet::message(packet.content, nickname.clone());
-                    broadcast(&clients, &message_packet);
+                    broadcast(&clients, &message_packet)?;
+                },
+                PacketType::InfoRequest => {
+                    match &packet.content[..] {
+                        "connection" => {
+                            let packet = Packet::connection(clients.lock().unwrap().len());
+                            send_packet(&packet, &stream)?;
+                        },
+                        _ => {},
+                    }
                 },
                 _ => {},
             }
@@ -113,23 +111,28 @@ fn handle_client(
         .unwrap()
         .retain(|c| !Arc::ptr_eq(&c.stream, &stream));
     let leave_packet = Packet::leave(nickname.clone());
-    broadcast(&clients, &leave_packet);
+    broadcast(&clients, &leave_packet)?;
     println!("{peer} ({nickname}) disconnected");
+
+    Ok(())
 }
 
-
-fn broadcast(clients: &SharedClients, packet: &Packet) {
-    packet.log(); // ログ出力
-
-    let list = clients.lock().unwrap();
+fn send_packet(packet: &Packet, stream: &Arc<Mutex<TcpStream>>) -> Result<()> {
+    let mut guard = stream.lock().unwrap();
     if let Ok(json) = packet.to_json() {
-        let message = format!("{}\n", json);
-        for client in list.iter() {
-            if let Ok(mut s) = client.stream.lock() {
-                let _ = s.write_all(message.as_bytes());
-            }
-        }
+        guard.write_all(format!("{}\n", json).as_bytes())?;
+        guard.flush()?;
     }
+    Ok(())
+}
+
+fn broadcast(clients: &SharedClients, packet: &Packet) -> Result<()> {
+    let list = clients.lock().unwrap();
+    for client in list.iter() {
+        send_packet(packet, &client.stream)?;
+    }
+
+    Ok(())
 }
 
 fn request_nickname(stream: &Arc<Mutex<TcpStream>>, peer: SocketAddr) -> Result<()> {
