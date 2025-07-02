@@ -17,66 +17,6 @@ use crossterm::{
     QueueableCommand,
 };
 
-fn get_arguments() -> String {
-    let args: Vec<String> = env::args().collect();
-    let iport = if args.len() >= 2 {
-        match args[1].find(":") {
-            Some(index) => args[1].clone(),
-            None => format!("{}:8080", &args[1]),
-        }
-    } else {
-        "localhost:8080".to_string()
-    };
-    let ip = iport.split(":").next().unwrap();
-    let port = iport.split(":").skip(1).next().unwrap();
-    format!("{}:{}", ip, port)
-}
-
-fn recv_thread(reader: TcpStream, tx: mpsc::Sender<String>) {
-    thread::spawn(move || {
-        let mut buf_reader = BufReader::new(reader);
-        let mut line = String::new();
-        loop {
-            line.clear();
-            if buf_reader.read_line(&mut line).unwrap_or(0) == 0 { break; }
-            
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-
-            if let Ok(packet) = Packet::from_json(trimmed) {
-                match packet.packet_type {
-                    PacketType::NicknameRequest => {
-                        tx.send(packet.content).ok();
-                    },
-                    PacketType::NicknameResponse => {
-                        // ニックネーム応答は通常表示しない
-                    },
-                    PacketType::Message => {
-                        if let Some(nickname) = packet.nickname {
-                            tx.send(format!("{} : {}", nickname, packet.content)).ok();
-                        }
-                    },
-                    PacketType::Join | PacketType::Leave => {
-                        tx.send(packet.content).ok();
-                    },
-                    PacketType::InfoRequest => {
-                        eprintln!("This is the packet type sent by the client.")
-                    },
-                    PacketType::Connection => {
-                        tx.send(format!("Connected clients: {}", packet.content)).ok();
-                    },
-                    PacketType::Error => {
-                        tx.send(format!("Error: {}", packet.content)).ok();
-                    },
-                }
-            } else {
-                eprintln!("Failed to parse JSON: {:?}", trimmed); // デバッグ用
-            }
-        }
-    });
-}
 
 fn main() -> Result<()> {
     // ----- コマンドライン引数から取得 -----
@@ -205,4 +145,67 @@ fn main() -> Result<()> {
     stdout.execute(LeaveAlternateScreen)?;
     terminal::disable_raw_mode()?;
     Ok(())
+}
+
+
+
+fn get_arguments() -> String {
+    let args: Vec<String> = env::args().collect();
+    let iport = if args.len() >= 2 {
+        match args[1].find(":") {
+            Some(index) => args[1].clone(),
+            None => format!("{}:8080", &args[1]),
+        }
+    } else {
+        "localhost:8080".to_string()
+    };
+    let ip = iport.split(":").next().unwrap();
+    let port = iport.split(":").skip(1).next().unwrap();
+    format!("{}:{}", ip, port)
+}
+
+fn recv_thread(reader: TcpStream, tx: mpsc::Sender<String>) {
+    thread::spawn(move || {
+        let mut buf_reader = BufReader::new(reader);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            if buf_reader.read_line(&mut line).unwrap_or(0) == 0 { break; }
+            
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            if let Ok(packet) = Packet::from_json(trimmed) {
+                match packet.packet_type {
+                    PacketType::NicknameRequest => {
+                        tx.send(packet.content).ok();
+                    },
+                    PacketType::NicknameResponse => {
+                        // ニックネーム応答は通常表示しない
+                    },
+                    PacketType::Message => {
+                        if let Some(nickname) = packet.nickname {
+                            tx.send(format!("{} : {}", nickname, packet.content)).ok();
+                        }
+                    },
+                    PacketType::Join | PacketType::Leave => {
+                        tx.send(packet.content).ok();
+                    },
+                    PacketType::InfoRequest => {
+                        eprintln!("This is the packet type sent by the client.")
+                    },
+                    PacketType::Connection => {
+                        tx.send(format!("Connected clients: {}", packet.content)).ok();
+                    },
+                    PacketType::Error => {
+                        tx.send(format!("Error: {}", packet.content)).ok();
+                    },
+                }
+            } else {
+                eprintln!("Failed to parse JSON: {:?}", trimmed); // デバッグ用
+            }
+        }
+    });
 }

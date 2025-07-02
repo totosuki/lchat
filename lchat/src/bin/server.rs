@@ -117,14 +117,7 @@ fn handle_client(
     Ok(())
 }
 
-fn send_packet(packet: &Packet, stream: &Arc<Mutex<TcpStream>>) -> Result<()> {
-    let mut guard = stream.lock().unwrap();
-    if let Ok(json) = packet.to_json() {
-        guard.write_all(format!("{}\n", json).as_bytes())?;
-        guard.flush()?;
-    }
-    Ok(())
-}
+
 
 fn broadcast(clients: &SharedClients, packet: &Packet) -> Result<()> {
     let list = clients.lock().unwrap();
@@ -132,16 +125,6 @@ fn broadcast(clients: &SharedClients, packet: &Packet) -> Result<()> {
         send_packet(packet, &client.stream)?;
     }
 
-    Ok(())
-}
-
-fn request_nickname(stream: &Arc<Mutex<TcpStream>>, peer: SocketAddr) -> Result<()> {
-    let packet = Packet::nickname_request();
-    let mut guard = stream.lock().unwrap();
-    if let Ok(json) = packet.to_json() {
-        guard.write_all(format!("{}\n", json).as_bytes())?;
-        guard.flush()?;
-    }
     Ok(())
 }
 
@@ -168,4 +151,25 @@ fn get_nickname(stream: &Arc<Mutex<TcpStream>>) -> Result<String> {
     } else {
         Err(Error::new(ErrorKind::InvalidInput, "invalid packet type for nickname"))
     }
+}
+
+fn request_nickname(stream: &Arc<Mutex<TcpStream>>, peer: SocketAddr) -> Result<()> {
+    let packet = Packet::nickname_request();
+    let mut guard = stream.lock().unwrap();
+    if let Ok(json) = packet.to_json() {
+        guard.write_all(format!("{}\n", json).as_bytes())?;
+        guard.flush()?;
+    }
+    Ok(())
+}
+
+
+
+fn send_packet(packet: &Packet, stream: &Arc<Mutex<TcpStream>>) -> Result<()> {
+    let mut guard = stream.lock().unwrap();
+    if let Ok(json) = packet.to_json() {
+        guard.write_all(format!("{}\n", json).as_bytes())?;
+        guard.flush()?;
+    }
+    Ok(())
 }
