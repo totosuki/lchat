@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+pub mod server;
+pub mod client;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PacketType {
     NicknameRequest,
