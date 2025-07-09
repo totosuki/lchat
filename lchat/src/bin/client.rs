@@ -1,6 +1,10 @@
 use std::io::Result;
 
-use lchat::client::*;
+use lchat::client::{
+    network::{self, NetworkManager},
+    input::{InputHandler, KeyAction},
+    ui::{ClientUI, AppState},
+};
 
 fn main() -> Result<()> {
     // ----- ネットワーク接続 -----

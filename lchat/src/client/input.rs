@@ -3,7 +3,7 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
 };
 
-use crate::client::AppState;
+use crate::client::ui::AppState;
 
 /// キーボード入力に対するアクション
 #[derive(Debug)]
